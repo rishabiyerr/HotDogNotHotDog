@@ -1,42 +1,55 @@
 import numpy as np
 import DataPrep
-import Neuron
 import WeightBias
+import cv2
+import random
 
 xTrain, yTrain = DataPrep.loadDataSet('DataSet/train')
 xTest,  yTest  = DataPrep.loadDataSet('DataSet/test')
 
-x = DataPrep.imagePrep(xTrain[1])
-w, b = WeightBias.initParams(x.shape[1])
-w1, b1 = WeightBias.initParams(64)
-w2, b2 = WeightBias.initParams(16)
-w3, b3 = WeightBias.initParams(4)
-epoch = 50
-for f in range (epoch):
-    for i in range(len(xTrain)):
-        x = DataPrep.imagePrep(xTrain[i])
+np.random.seed(1)
+n_features = DataPrep.imagePrep(xTrain[0]).shape[1]
 
-        inputLayer = []
-        for y in range(64):
-            inputLayer.append(Neuron.neuron(x, w, b))
+params = {}
+params['W1'], params['b1'] = WeightBias.initParams(n_features, 16)
+params['W2'], params['b2'] = WeightBias.initParams(16, 1)
 
+indices = np.arange(len(xTrain))
 
-        layerTwo = []
-        for y in range (0, 64, 4):
-            h = max(inputLayer[y], inputLayer[y+1], inputLayer[y+2], inputLayer[y+3])
-            layerTwo.append(Neuron.neuron(h, w1, b1))
+for epoch in range(25):
+    np.random.shuffle(indices)
+    rotation_options = [
+        None, 
+        cv2.ROTATE_90_CLOCKWISE, 
+        cv2.ROTATE_180, 
+        cv2.ROTATE_90_COUNTERCLOCKWISE
+    ]
+    for step, i in enumerate(indices):
+        angle = random.choice(rotation_options)
+        x = DataPrep.imagePrep(xTrain[i], angle=angle)
+        y = np.array(yTrain[i]).reshape(1, 1)
+        a2, cache = WeightBias.forward(x, params)
+        params = WeightBias.gradientDescent(y, params, cache)
+        loss = -(y * np.log(a2 + 1e-9) + (1 - y) * np.log(1 - a2 + 1e-9))
+        if step % 100 == 0:
+            print(f"epoch {epoch}, step {step}, loss {loss.item():.4f}")
 
-        layerThree = []
-        for y in range (0, 16, 4):
-            h = max(layerTwo[y], layerTwo[y+1], layerTwo[y+2], layerTwo[y+3])
-            layerThree.append(Neuron.neuron(h, w2, b2))
+correct = 0
+for i in range(len(xTest)):
+    x = DataPrep.imagePrep(xTest[i])
+    y = yTest[i]
+    a4, _ = WeightBias.forward(x, params)
+    pred = 1 if a4.item() > 0.5 else 0
+    if pred == y:
+        correct += 1
+print(f"Test accuracy: {correct / len(xTest):.3f}")
 
-        output = []
-        for y in range (0, 4, 4):
-            h = max(layerThree[y], layerThree[y+1], layerThree[y+2], layerThree[y+3])
-            output.append(Neuron.neuron(h, w3, b3))
-        print(output)
-        w, b = WeightBias.gradientDescent(x, yTrain[i], w, b)
-        w1, b1 = WeightBias.gradientDescent(h, yTrain[i], w1, b1)
-        w2, b2 = WeightBias.gradientDescent(h, yTrain[i], w2, b2)
-        w3, b3 = WeightBias.gradientDescent(h, yTrain[i], w3, b3)
+train_correct = 0
+for i in range(len(xTrain)):
+    x = DataPrep.imagePrep(xTrain[i])
+    y = yTrain[i]
+    a2, _ = WeightBias.forward(x, params)
+    pred = 1 if a2.item() > 0.5 else 0
+    if pred == y:
+        train_correct += 1
+print(f"Train accuracy: {train_correct / len(xTrain):.3f}")
